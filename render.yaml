@@ -1,0 +1,56 @@
+# Render blueprint. Create a new Blueprint Instance from the repo and Render
+# provisions all three services. Everything below fits the free tier.
+databases:
+  - name: alpago-db
+    databaseName: alpago
+    user: alpago
+    plan: free
+
+services:
+  - type: web
+    name: alpago-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alpago-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      # Tighten this to the deployed web origin once you have the URL.
+      - key: CORS_ORIGINS
+        value: "*"
+      # Loads the sample workbook data on first boot. Idempotent; safe to leave on.
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: AI_ENABLED
+        value: "true"
+      # Set this in the Render dashboard, not in source control.
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: qwen/qwen3.8-27b
+      - key: AI_BASE_URL
+        value: https://api.groq.com/openai/v1
+
+  - type: web
+    name: alpago-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: /api/v1
+    routes:
+      # Same-origin API so the browser never needs CORS.
+      - type: rewrite
+        source: /api/*
+        destination: https://alpago-api.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
